@@ -1,36 +1,39 @@
 --[[
-    Script: MyHub v1.0
-    Author: [Your Name]
+    Script: MyHub v1.2 (Fixed for Steal a Brainrot)
+    Author: kuak saudi
     Description: A feature-rich script for Steal a Brainrot.
 ]]
 
 -- =================================================================
 --                        CONFIGURATION
 -- =================================================================
-local authorName = "[kuak saudi]"
-local discordLink = "[https://discord.gg/YprBskZdc9]" -- Example: "https://discord.gg/your-server"
+local authorName = "kuak saudi"
+local discordLink = "https://discord.gg/YprBskZdc9"
 
 -- =================================================================
 --                        INITIALIZATION
 -- =================================================================
--- Prevents the script from running twice
-if game.Players.LocalPlayer:WaitForChild("PlayerGui" ):FindFirstChild("MyHubGui") then
-    game.Players.LocalPlayer.PlayerGui.MyHubGui:Destroy()
+print("MyHub v1.2: Initializing..." )
+
+-- Clean up old GUI
+if game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui"):FindFirstChild("MyHubGui") then
+    game:GetService("Players").LocalPlayer.PlayerGui.MyHubGui:Destroy()
 end
 
--- Main GUI container
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "MyHubGui"
-screenGui.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
+screenGui.Parent = game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")
 screenGui.ResetOnSpawn = false
 
 -- Services
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 -- Local Player
 local LocalPlayer = Players.LocalPlayer
+print("MyHub: LocalPlayer found: " .. LocalPlayer.Name)
 
 -- =================================================================
 --                        MAIN HUB GUI
@@ -42,27 +45,27 @@ mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 mainFrame.BorderColor3 = Color3.fromRGB(80, 80, 80)
 mainFrame.BorderSizePixel = 2
 mainFrame.Position = UDim2.new(0.5, -175, 0.5, -150)
-mainFrame.Size = UDim2.new(0, 350, 0, 300)
+mainFrame.Size = UDim2.new(0, 350, 0, 250) -- Reduced size slightly
 mainFrame.Draggable = true
 mainFrame.Active = true
+mainFrame.Visible = true
 
 local titleLabel = Instance.new("TextLabel")
 titleLabel.Parent = mainFrame
 titleLabel.Size = UDim2.new(1, 0, 0, 30)
 titleLabel.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
 titleLabel.Font = Enum.Font.SourceSansBold
-titleLabel.Text = "MyHub v1.0 - By " .. authorName
+titleLabel.Text = "MyHub v1.2 - By " .. authorName
 titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 titleLabel.TextSize = 18
 
--- Function to create a toggle button
 local function createToggleButton(parent, text, position, callback)
     local toggled = false
     local button = Instance.new("TextButton")
     button.Parent = parent
     button.Position = position
     button.Size = UDim2.new(0.45, 0, 0, 35)
-    button.BackgroundColor3 = Color3.fromRGB(190, 40, 40) -- Red (Off)
+    button.BackgroundColor3 = Color3.fromRGB(190, 40, 40)
     button.Font = Enum.Font.SourceSansBold
     button.Text = text
     button.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -70,8 +73,8 @@ local function createToggleButton(parent, text, position, callback)
 
     button.MouseButton1Click:Connect(function()
         toggled = not toggled
-        button.BackgroundColor3 = toggled and Color3.fromRGB(40, 190, 40) or Color3.fromRGB(190, 40, 40) -- Green (On) / Red (Off)
-        callback(toggled)
+        button.BackgroundColor3 = toggled and Color3.fromRGB(40, 190, 40) or Color3.fromRGB(190, 40, 40)
+        pcall(callback, toggled)
     end)
     return button
 end
@@ -81,125 +84,134 @@ end
 -- =================================================================
 
 -- ESP Features
-local espEnabled = { houseTimer = false, bestPet = false }
-local espConnections = {}
+local espEnabled = { bestPet = false }
+local espElements = {}
 
-function updateEsp(enabled)
-    -- Clear previous ESP elements
-    for _, conn in pairs(espConnections) do conn:Disconnect() end
-    espConnections = {}
-    for _, v in pairs(Workspace:GetDescendants()) do
-        if v.Name == "ESP_ELEMENT" then v:Destroy() end
+RunService.RenderStepped:Connect(function()
+    -- Clear old elements if the pet is gone
+    for item, element in pairs(espElements) do
+        if not item or not item.Parent then
+            element:Destroy()
+            espElements[item] = nil
+        end
     end
 
-    if not enabled then return end
+    if not espEnabled.bestPet then return end
 
-    -- Create new ESP elements
-    table.insert(espConnections, RunService.RenderStepped:Connect(function()
-        for _, house in pairs(Workspace.Houses:GetChildren()) do
-            if house:FindFirstChild("Humanoid") and house:FindFirstChild("Head") then
-                local timer = house:FindFirstChild("T")
-                if espEnabled.houseTimer and timer and timer:IsA("BillboardGui") then
-                    timer.Enabled = true
-                elseif not espEnabled.houseTimer and timer and timer:IsA("BillboardGui") then
-                    timer.Enabled = false
-                end
+    local housesFolder = Workspace:FindFirstChild("Houses")
+    if not housesFolder then return end
 
-                if espEnabled.bestPet then
-                    local bestPet, maxStrength = nil, -1
-                    for _, pet in pairs(house.Pets:GetChildren()) do
-                        local strength = pet:GetAttribute("Strength")
-                        if strength and strength > maxStrength then
-                            maxStrength = strength
-                            bestPet = pet
-                        end
-                    end
-                    
-                    if bestPet and not bestPet:FindFirstChild("ESP_ELEMENT") then
-                        local highlight = Instance.new("BoxHandleAdornment")
-                        highlight.Name = "ESP_ELEMENT"
-                        highlight.Adornee = bestPet
-                        highlight.Size = bestPet.Size + Vector3.new(1, 1, 1)
-                        highlight.Color3 = Color3.fromRGB(255, 255, 0) -- Yellow
-                        highlight.Transparency = 0.5
-                        highlight.AlwaysOnTop = true
-                        highlight.Parent = bestPet
+    for _, house in pairs(housesFolder:GetChildren()) do
+        if house:IsA("Model") and house:FindFirstChild("Head") then
+            local bestPet, maxStrength = nil, -1
+            local petsFolder = house:FindFirstChild("Pets")
+            if petsFolder then
+                for _, pet in pairs(petsFolder:GetChildren()) do
+                    local strength = pet:GetAttribute("Strength")
+                    if strength and strength > maxStrength then
+                        maxStrength = strength
+                        bestPet = pet
                     end
                 end
             end
+            
+            if bestPet and not espElements[bestPet] then
+                local highlight = Instance.new("BoxHandleAdornment")
+                highlight.Adornee = bestPet
+                highlight.Size = bestPet.Size + Vector3.new(1, 1, 1)
+                highlight.Color3 = Color3.fromRGB(255, 255, 0) -- Yellow
+                highlight.Transparency = 0.5
+                highlight.AlwaysOnTop = true
+                highlight.Parent = bestPet
+                espElements[bestPet] = highlight
+            end
         end
-    end))
-end
+    end
+end)
 
 -- Player Hacks
 local speedEnabled, jumpEnabled, boostOnStealEnabled = false, false, false
-local originalWalkSpeed, originalJumpPower = 16, 50
+local originalWalkSpeed, originalJumpPower = 16, 50 -- Default values
 
-function applyPlayerHacks()
-    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-        local humanoid = LocalPlayer.Character.Humanoid
-        if not originalWalkSpeed then originalWalkSpeed = humanoid.WalkSpeed end
-        if not originalJumpPower then originalJumpPower = humanoid.JumpPower end
-        
-        humanoid.WalkSpeed = speedEnabled and 100 or originalWalkSpeed
-        humanoid.JumpPower = jumpEnabled and 100 or originalJumpPower
-    end
+local function getHumanoid()
+    return LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+end
+
+local function applyPlayerHacks()
+    local humanoid = getHumanoid()
+    if not humanoid then return end
+    
+    humanoid.WalkSpeed = speedEnabled and 100 or originalWalkSpeed
+    humanoid.JumpPower = jumpEnabled and 100 or originalJumpPower
 end
 
 LocalPlayer.CharacterAdded:Connect(function(character)
-    character:WaitForChild("Humanoid").HealthChanged:Connect(function()
-        applyPlayerHacks()
-    end)
+    print("MyHub: New character loaded. Applying hacks.")
+    local humanoid = character:WaitForChild("Humanoid")
+    originalWalkSpeed = humanoid.WalkSpeed
+    originalJumpPower = humanoid.JumpPower
+    applyPlayerHacks()
 end)
 
--- Speed boost on steal
-if Workspace.Events:FindFirstChild("StolePet") then
-    Workspace.Events.StolePet.OnClientEvent:Connect(function(player)
-        if boostOnStealEnabled and player == LocalPlayer and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-            local humanoid = LocalPlayer.Character.Humanoid
-            humanoid.WalkSpeed = 200 -- Temporary high speed
-            wait(3) -- Boost duration
-            humanoid.WalkSpeed = speedEnabled and 100 or originalWalkSpeed -- Return to normal/hacked speed
+-- Speed boost on steal (FIXED PATH)
+local stolePetEvent = ReplicatedStorage:WaitForChild("Default"):WaitForChild("Events"):WaitForChild("StolePet")
+if stolePetEvent then
+    stolePetEvent.OnClientEvent:Connect(function(player)
+        if boostOnStealEnabled and player == LocalPlayer then
+            local humanoid = getHumanoid()
+            if humanoid then
+                print("MyHub: Speed boost activated!")
+                humanoid.WalkSpeed = 200
+                task.wait(3) -- Use task.wait for better performance
+                applyPlayerHacks() -- Re-apply correct speed
+            end
         end
     end)
+    print("MyHub: 'StolePet' event connected successfully at new path.")
+else
+    warn("MyHub: Could not find 'StolePet' event.")
 end
 
 -- =================================================================
 --                        BUTTONS
 -- =================================================================
 
--- ESP Buttons
-createToggleButton(mainFrame, "House Timers ESP", UDim2.new(0.025, 0, 0.15, 0), function(state)
-    espEnabled.houseTimer = state
-    updateEsp(espEnabled.houseTimer or espEnabled.bestPet)
-end)
-
-createToggleButton(mainFrame, "Best Pet ESP", UDim2.new(0.525, 0, 0.15, 0), function(state)
+-- Best Pet ESP Button
+createToggleButton(mainFrame, "Best Pet ESP", UDim2.new(0.025, 0, 0.15, 0), function(state)
+    print("MyHub: Best Pet ESP toggled to " .. tostring(state))
     espEnabled.bestPet = state
-    updateEsp(espEnabled.houseTimer or espEnabled.bestPet)
+    if not state then -- Clear ESP when turned off
+        for item, element in pairs(espElements) do
+            element:Destroy()
+            espElements[item] = nil
+        end
+    end
 end)
 
 -- Player Hack Buttons
-createToggleButton(mainFrame, "Speed Hack", UDim2.new(0.025, 0, 0.35, 0), function(state)
+createToggleButton(mainFrame, "Speed Hack", UDim2.new(0.525, 0, 0.15, 0), function(state)
+    print("MyHub: Speed Hack toggled to " .. tostring(state))
     speedEnabled = state
     applyPlayerHacks()
 end)
 
-createToggleButton(mainFrame, "Jump Hack", UDim2.new(0.525, 0, 0.35, 0), function(state)
+createToggleButton(mainFrame, "Jump Hack", UDim2.new(0.025, 0, 0.35, 0), function(state)
+    print("MyHub: Jump Hack toggled to " .. tostring(state))
     jumpEnabled = state
     applyPlayerHacks()
 end)
 
-createToggleButton(mainFrame, "Boost on Steal", UDim2.new(0.025, 0, 0.55, 0), function(state)
+createToggleButton(mainFrame, "Boost on Steal", UDim2.new(0.525, 0, 0.35, 0), function(state)
+    print("MyHub: Boost on Steal toggled to " .. tostring(state))
     boostOnStealEnabled = state
 end)
 
 -- Discord Button
 local discordButton = Instance.new("TextButton")
 discordButton.Parent = mainFrame
-discordButton.Position = UDim2.new(0.025, 0, 0.75, 0)
+discordButton.Position = UDim2.new(0.025, 0, 0.70, 0)
 discordButton.Size = UDim2.new(0.95, 0, 0, 40)
-discordButton.BackgroundColor3 = Color3.fromRGB(86, 98, 246) -- Discord color
+discordButton.BackgroundColor3 = Color3.fromRGB(86, 98, 246)
 discordButton.Font = Enum.Font.SourceSansBold
 discordButton.Text = "Copy Discord Link"
 discordButton.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -207,7 +219,7 @@ discordButton.TextSize = 16
 discordButton.MouseButton1Click:Connect(function()
     if setclipboard then
         setclipboard(discordLink)
-    else
-        warn("Executor does not support 'setclipboard'.")
     end
 end)
+
+print("MyHub v1.2: Fully loaded and ready.")
